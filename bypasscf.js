@@ -370,6 +370,14 @@ async function launchBrowserForUser(username, password, cookie = null) {
         // 重新尝试你的操作...
       }
     });
+
+    
+    // 打印页面跳转，观察阅读进度
+    page.on("framenavigated", (frame) => {
+      if (frame.parentFrame() !== null) return;
+      console.log(`[跳转] ${new Date().toISOString()} ${frame.url()}`);
+    });
+    
     page.on("console", async (msg) => {
       const text = msg.text();
       if (/阅读|点赞|滚动|话题|成功|失败|error/i.test(text)) {
