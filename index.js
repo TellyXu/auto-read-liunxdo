@@ -29,7 +29,7 @@
     "https://idcflare.com/",
   ];
   const commentLimit = 1000;
-  const topicListLimit = 100;
+  const topicListLimit = 20;
   const likeLimit = 50;
   // 获取当前页面的URL
   const currentURL = window.location.href;
@@ -70,7 +70,7 @@
   let checkScrollTimeout = null;
   let autoLikeInterval = null;
 
-  function scrollToBottomSlowly(distancePerStep = 20, delayPerStep = 50) {
+  function scrollToBottomSlowly(distancePerStep = 10, delayPerStep = 100) {
     if (scrollInterval !== null) {
       clearInterval(scrollInterval);
     }
@@ -128,7 +128,7 @@
     // localStorage.setItem("latestPage", latestPage);
     localStorage.setItem("topicList", JSON.stringify(topicList));
   }
-
+  
   function openNewTopic() {
     let topicListStr = localStorage.getItem("topicList");
     let topicList = topicListStr ? JSON.parse(topicListStr) : [];
@@ -140,15 +140,16 @@
       topicList = topicListStr ? JSON.parse(topicListStr) : [];
     }
 
-    // 如果获取到新文章，打开第一个
+    // 如果获取到新文章，随机停顿几秒再打开第一个
     if (topicList.length > 0) {
       const topic = topicList.shift();
       localStorage.setItem("topicList", JSON.stringify(topicList));
-      if (topic.last_read_post_number) {
-        window.location.href = `${BASE_URL}/t/topic/${topic.id}/${topic.last_read_post_number}`;
-      } else {
-        window.location.href = `${BASE_URL}/t/topic/${topic.id}`;
-      }
+      const wait = 3000 + Math.random() * 5000; // 3-8 秒
+      setTimeout(() => {
+        window.location.href = topic.last_read_post_number
+          ? `${BASE_URL}/t/topic/${topic.id}/${topic.last_read_post_number}`
+          : `${BASE_URL}/t/topic/${topic.id}`;
+      }, wait);
     }
   }
 
