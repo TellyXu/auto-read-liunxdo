@@ -503,7 +503,7 @@ async function launchBrowserForUser(username, password, cookie = null) {
         timeout: parseInt(process.env.NAV_TIMEOUT_MS || process.env.NAV_TIMEOUT || "120000", 10),
       });
     } else {
-      await page.goto(`${loginUrl}/t/topic/77567`, {
+      await page.goto(`${loginUrl}/t/topic/243978`, {
         waitUntil: "domcontentloaded",
         timeout: parseInt(process.env.NAV_TIMEOUT_MS || process.env.NAV_TIMEOUT || "120000", 10),
       });
