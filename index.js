@@ -19,6 +19,8 @@
 
 (function () {
   ("use strict");
+  // 只在顶层页面运行，iframe 里会误判"到底部"并偷走待读队列
+  if (window.top !== window.self) return;
   // 定义可能的基本URL
   const possibleBaseURLs = [
     "https://www.uscardforum.com",

@@ -313,7 +313,14 @@ async function launchBrowserForUser(username, password, cookie = null) {
     console.log("当前用户:", maskUsername(username));
     const browserOptions = {
       headless: "auto",
-      args: ["--no-sandbox", "--disable-setuid-sandbox"], // Linux 需要的安全设置
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox", // Linux 需要的安全设置
+        // 防止不可见窗口的定时器被节流，否则滚动脚本几乎不执行
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
+      ],
     };
 
     // 添加代理配置到浏览器选项
