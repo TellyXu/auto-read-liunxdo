@@ -337,8 +337,27 @@ async function launchBrowserForUser(username, password, cookie = null) {
     }
 
     var { connect } = await import("puppeteer-real-browser");
-    const { page, browser: newBrowser } = await connect(browserOptions);
-    browser = newBrowser; // 将 browser 初始化
+    // 浏览器偶发启动失败(ECONNREFUSED)，重试几次
+    let page;
+    let connectError;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const result = await connect(browserOptions);
+        page = result.page;
+        browser = result.browser;
+        connectError = null;
+        break;
+      } catch (err) {
+        connectError = err;
+        console.log(`浏览器启动失败(第 ${attempt}/3 次): ${err.message}`);
+        if (browser) {
+          try { await browser.close(); } catch (e) {}
+          browser = null;
+        }
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 10000));
+      }
+    }
+    if (connectError) throw connectError;
     // 启动截图功能
     // takeScreenshots(page);
     //登录操作
