@@ -21,6 +21,7 @@
   ("use strict");
   // 定义可能的基本URL
   const possibleBaseURLs = [
+    "https://www.uscardforum.com",
     "https://linux.do",
     "https://meta.discourse.org",
     "https://meta.appinn.net",
