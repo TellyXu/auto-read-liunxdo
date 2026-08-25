@@ -20,6 +20,8 @@ jobs:
       PASSWORDS: ${{ secrets.PASSWORDS }}
       COOKIES: ${{ secrets.COOKIES }}
       WEBSITE: ${{ secrets.WEBSITE }}
+      # 用于运行结束时把轮换后的Cookie写回COOKIES secret
+      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       RUN_TIME_LIMIT_MINUTES: 30
       MAX_CONCURRENT_ACCOUNTS: ${{ secrets.MAX_CONCURRENT_ACCOUNTS }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

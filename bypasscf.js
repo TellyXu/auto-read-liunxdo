@@ -68,8 +68,9 @@ console.log(
 );
 
 // 设置一个定时器，在运行时间到达时终止进程
-const shutdownTimer = setTimeout(() => {
+const shutdownTimer = setTimeout(async () => {
   console.log("时间到,Reached time limit, shutting down the process...");
+  await syncCookiesToSecret(); // 退出前把轮换后的Cookie写回Secret
   process.exit(0); // 退出进程
 }, runTimeLimitMillis);
 
@@ -82,6 +83,8 @@ const usernames = process.env.USERNAMES.split(",");
 const passwords = process.env.PASSWORDS ? process.env.PASSWORDS.split(",") : [];
 // 读取每个账号对应的Cookie（逗号分隔，与USERNAMES一一对应），有Cookie则跳过表单登录
 const cookiesEnv = process.env.COOKIES ? process.env.COOKIES.split(",") : [];
+// 记录各账号登录成功后的页面，运行结束时从中读取轮换后的 _t 回写Secret
+const activePages = new Map();
 const loginUrl = process.env.WEBSITE || "https://linux.do"; //在GitHub action环境里它不能读取默认环境变量,只能在这里设置默认值
 const delayBetweenInstances = 10000;
 const totalAccounts = usernames.length; // 总的账号数
@@ -243,7 +246,7 @@ function delayClick(time) {
         // };  更好理解
         return new Promise((resolve, reject) => {
           setTimeout(() => {
-            launchBrowserForUser(username, password, cookie)
+            launchBrowserForUser(username, password, cookie, index)
               .then(resolve)
               .catch(reject);
           }, delay);
@@ -261,6 +264,13 @@ function delayClick(time) {
           return browser;
         }); // 等待当前批次的任务完成
       const browsers = await Promise.all(batch); // Task里面的任务本身是没有进行await的, 所以会继续执行下面的代码
+
+      // 全部账号都没能登录时直接结束，不再空等到时间上限
+      if (browsers.filter(Boolean).length === 0) {
+        console.log("本批次账号全部启动或登录失败，提前结束运行");
+        clearTimeout(shutdownTimer);
+        process.exit(1);
+      }
 
       // 如果还有下一个批次，等待指定的时间,同时，如果总共只有一个账号，也需要继续运行
       if (i + maxConcurrentAccounts < totalAccounts || i === 0) {
@@ -293,6 +303,82 @@ function delayClick(time) {
     }
   }
 })();
+// 运行结束前把浏览器里轮换后的 _t 写回仓库的 COOKIES secret，避免下次运行时Cookie已失效
+// 需要 PAT_TOKEN（repo 权限）；日志里只输出状态，绝不打印Cookie值
+async function syncCookiesToSecret() {
+  const pat = process.env.PAT_TOKEN;
+  const repo = process.env.GITHUB_REPOSITORY;
+  if (!pat || !repo) {
+    console.log("未配置 PAT_TOKEN 或非 Actions 环境，跳过Cookie回写");
+    return;
+  }
+  if (activePages.size === 0) {
+    console.log("没有存活的登录会话，跳过Cookie回写");
+    return;
+  }
+  try {
+    const updated = usernames.map((_, i) => (cookiesEnv[i] || "").trim());
+    let changed = false;
+    for (const [index, page] of activePages) {
+      try {
+        const cookies = await page.cookies(loginUrl);
+        const tCookie = cookies.find((c) => c.name === "_t");
+        if (tCookie && updated[index] !== `_t=${tCookie.value}`) {
+          updated[index] = `_t=${tCookie.value}`;
+          changed = true;
+        }
+      } catch (e) {
+        console.log(`账号 ${index + 1} 读取Cookie失败: ${e.message}`);
+      }
+    }
+    if (!changed) {
+      console.log("Cookie无变化，跳过回写");
+      return;
+    }
+    const sodium = (await import("libsodium-wrappers")).default;
+    await sodium.ready;
+    const headers = {
+      Authorization: `Bearer ${pat}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "auto-read",
+    };
+    const keyResp = await fetch(
+      `https://api.github.com/repos/${repo}/actions/secrets/public-key`,
+      { headers }
+    );
+    if (!keyResp.ok) {
+      console.log(`获取仓库公钥失败: HTTP ${keyResp.status}`);
+      return;
+    }
+    const { key, key_id } = await keyResp.json();
+    const sealed = sodium.crypto_box_seal(
+      sodium.from_string(updated.join(",")),
+      sodium.from_base64(key, sodium.base64_variants.ORIGINAL)
+    );
+    const putResp = await fetch(
+      `https://api.github.com/repos/${repo}/actions/secrets/COOKIES`,
+      {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          encrypted_value: sodium.to_base64(
+            sealed,
+            sodium.base64_variants.ORIGINAL
+          ),
+          key_id,
+        }),
+      }
+    );
+    console.log(
+      putResp.ok
+        ? "COOKIES secret 已回写为最新Cookie"
+        : `回写 secret 失败: HTTP ${putResp.status}`
+    );
+  } catch (e) {
+    console.log(`Cookie回写失败: ${e.message}`);
+  }
+}
+
 // 将浏览器Cookie字符串（如 "name=value; name2=value2"）解析为 puppeteer setCookie 所需的对象数组
 function parseCookieString(cookieStr, domain) {
   return cookieStr
@@ -307,7 +393,7 @@ function parseCookieString(cookieStr, domain) {
     });
 }
 
-async function launchBrowserForUser(username, password, cookie = null) {
+async function launchBrowserForUser(username, password, cookie = null, accountIndex = 0) {
   let browser = null; // 在 try 之外声明 browser 变量
   try {
     console.log("当前用户:", maskUsername(username));
@@ -470,6 +556,7 @@ async function launchBrowserForUser(username, password, cookie = null) {
       throw new Error("登录失败：页面显示未登录状态（auth-buttons）");
     } else if (avatarImg) {
       console.log("找到avatarImg，登录成功");
+      activePages.set(accountIndex, page);
     } else {
       console.log("未找到avatarImg，登录失败");
       throw new Error("登录失败");
