@@ -371,6 +371,10 @@ async function launchBrowserForUser(username, password, cookie = null) {
       }
     });
     page.on("console", async (msg) => {
+      const text = msg.text();
+      if (/阅读|点赞|滚动|话题|成功|失败|error/i.test(text)) {
+        console.log(`[页面] ${text}`);
+      }
       // console.log("PAGE LOG:", msg.text());
       // 使用一个标志变量来检测是否已经刷新过页面
       if (
