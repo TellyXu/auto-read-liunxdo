@@ -70,7 +70,7 @@
   let checkScrollTimeout = null;
   let autoLikeInterval = null;
 
-  function scrollToBottomSlowly(distancePerStep = 10, delayPerStep = 100) {
+  function scrollToBottomSlowly(distancePerStep = 20, delayPerStep = 80) {
     if (scrollInterval !== null) {
       clearInterval(scrollInterval);
     }
