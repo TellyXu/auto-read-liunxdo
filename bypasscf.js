@@ -375,7 +375,9 @@ async function launchBrowserForUser(username, password, cookie = null) {
     // 打印页面跳转，观察阅读进度
     page.on("framenavigated", (frame) => {
       if (frame.parentFrame() !== null) return;
-      console.log(`[跳转] ${new Date().toISOString()} ${frame.url()}`);
+      const url = frame.url();
+      if (!url.startsWith("http")) return; // 忽略 about:blank 等 iframe 噪音
+      console.log(`[跳转] ${new Date().toISOString()} ${url}`);
     });
     
     page.on("console", async (msg) => {
@@ -476,6 +478,16 @@ async function launchBrowserForUser(username, password, cookie = null) {
     await page.evaluateOnNewDocument(
       (...args) => {
         const [specificUser, scriptToEval, isAutoLike] = args;
+        // 缓存页面脚本的日志，供外部轮询读取
+        window.__logs = window.__logs || [];
+        const _origLog = console.log;
+        console.log = (...a) => {
+          try {
+            window.__logs.push(a.map(String).join(" "));
+            if (window.__logs.length > 500) window.__logs.splice(0, window.__logs.length - 500);
+          } catch (e) {}
+          _origLog.apply(console, a);
+        };
         localStorage.setItem("read", true);
         localStorage.setItem("specificUser", specificUser);
         localStorage.setItem("isFirstRun", "false");
@@ -528,6 +540,27 @@ async function launchBrowserForUser(username, password, cookie = null) {
     } catch (e) {
       console.warn(`Post-navigation inject failed: ${e && e.message ? e.message : e}`);
     }
+    // 每30秒打印一次阅读进度和页面脚本日志
+    setInterval(async () => {
+      try {
+        const info = await page.evaluate(() => {
+          const logs = (window.__logs || []).splice(0);
+          return {
+            url: location.href,
+            scrollY: Math.round(window.scrollY),
+            height: document.body ? document.body.offsetHeight : 0,
+            pending: JSON.parse(localStorage.getItem("topicList") || "[]").length,
+            logs,
+          };
+        });
+        console.log(
+          `[进度] ${new Date().toISOString()} ${info.url} | 滚动 ${info.scrollY}/${info.height} | 待读 ${info.pending} 帖`
+        );
+        info.logs.forEach((l) => console.log(`[页面] ${l}`));
+      } catch (e) {
+        console.log(`[进度] 读取失败(页面可能正在跳转): ${e.message}`);
+      }
+    }, 30000);
     if (token && chatId) {
       sendToTelegram(`${username} 登录成功`);
     } // 监听页面跳转到新话题，自动推送RSS example：https://linux.do/t/topic/525305.rss
